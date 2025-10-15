@@ -1,0 +1,19 @@
+{% extends 'api/base.html' %}
+{% load i18n %}
+{% block title %}{% trans "Your tasks" %}{% endblock %}
+{% block content %}
+        <div class="grid">
+        {% if tasks %}
+            {% for task in tasks %}
+                        <div class="card">
+                            <div class="title">{{ task.name }} {% if task.edited %}<span class="badge-edited">{% trans "edited" %}</span>{% endif %}</div>
+                            <div class="meta">{% trans "Created by" %} {{ task.user.username }}</div>
+                            <div class="desc">{{ task.desc }}</div>
+                            <div class="controls"><a href="{% url 'task_edit' task.pk %}">{% trans "Edit" %}</a></div>
+                        </div>
+            {% endfor %}
+        {% else %}
+            <div class="card">{% trans "No tasks." %} <a href="{% url 'task_create' %}">{% trans "Add first" %}</a></div>
+        {% endif %}
+    </div>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends 'api/base.html' %}
+{% load i18n %}
+{% block title %}{% trans "Panel" %}{% endblock %}
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+<style>
+/* Landing and card styles */
+.landing {max-width:1100px;margin:28px auto;padding:18px}
+.choices {display:flex;gap:20px;flex-wrap:wrap;justify-content:center}
+.choice {flex:1 1 320px;max-width:420px;background:#fff;border-radius:12px;padding:20px;border:1px solid #e6e7eb;box-shadow:0 6px 18px rgba(15,23,42,0.06);text-align:center}
+.choice h3{margin:6px 0 12px}
+.choice p{color:#6b7280}
+.btn-large{display:inline-block;padding:10px 18px;border-radius:8px;background:#2563eb;color:#fff;text-decoration:none;margin-top:12px}
+.task-list-cards{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.task-card{background:#fff;border-radius:10px;padding:12px;border:1px solid #eef2ff;display:flex;justify-content:space-between;align-items:flex-start}
+.task-meta{font-size:13px;color:#6b7280;margin-top:8px}
+.task-actions{display:flex;flex-direction:column;gap:8px}
+.small-btn{padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;background:#fff}
+.small-btn.primary{background:#10b981;color:#fff;border:none}
+</style>
+{% endblock %}
+{% block content %}
+<div class="landing">
+  <h1 style="text-align:center">{% trans "Welcome to your Tasks" %}</h1>
+  <p style="text-align:center;color:#6b7280">{% trans "From here you can open the Calendar to schedule tasks or manage the Task List as cards." %}</p>
+  <div class="choices">
+    <div class="choice">
+      <h3>{% trans "Calendar" %}</h3>
+      <p>{% trans "Full month view with drag & drop. Add tasks by clicking a day." %}</p>
+      <a class="btn-large" href="/tasks/dashboard/">{% trans "Open Calendar" %}</a>
+    </div>
+    <div class="choice">
+      <h3>{% trans "Task List" %}</h3>
+      <p>{% trans "Card-style list for quick management and priorities." %}</p>
+      <a class="btn-large" href="/tasks/list/">{% trans "Open Task List" %}</a>
+    </div>
+  </div>
+
+  <hr style="margin:20px 0">
+  <h2 style="text-align:center">{% trans "Quick overview" %}</h2>
+  <div id="quick-tasks" class="task-list-cards"></div>
+</div>
+
+<script>
+// fetch a short list of latest non-calendar tasks and show quick action buttons
+function getCookie(name){let cookieValue=null;if(document.cookie&&document.cookie!==''){const cookies=document.cookie.split(';');for(let i=0;i<cookies.length;i++){const cookie=cookies[i].trim();if(cookie.substring(0,name.length+1)===(name+'=')){cookieValue=decodeURIComponent(cookie.substring(name.length+1));break;}}}return cookieValue}
+
+function renderQuickTasks(){
+  fetch('/tasks/api/list/?limit=6').then(r=>r.json()).then(data=>{
+    const wrap = document.getElementById('quick-tasks');
+    wrap.innerHTML='';
+    data.forEach(t=>{
+      const card = document.createElement('div');
+      card.className='task-card';
+      card.innerHTML = `
+        <div>
+          <div style="font-weight:600">${t.name} ${t.edited?'<span style="font-size:12px;color:#9CA3AF;margin-left:8px">(edytowane)</span>':''}</div>
+          <div class="task-meta">${t.scheduled_date?('Date: '+t.scheduled_date):''} ${t.scheduled_time?(' Time: '+t.scheduled_time):''} • ${t.priority}</div>
+        </div>
+        <div class="task-actions">
+          <a class="small-btn" href="/tasks/task/${t.id}/edit/">Edit</a>
+          <button class="small-btn delete-btn" data-id="${t.id}">{% trans "Delete" %}</button>
+        </div>
+      `;
+      wrap.appendChild(card);
+    });
+  }).catch(()=>{document.getElementById('quick-tasks').innerHTML='';});
+
+  // delegate delete handler
+  document.addEventListener('click', function(e){
+    if(e.target && e.target.classList && e.target.classList.contains('delete-btn')){
+      const id = e.target.dataset.id;
+      if(!confirm('Delete?')) return;
+      fetch(`/tasks/api/${id}/delete/`,{method:'DELETE',headers:{'X-CSRFToken':getCookie('csrftoken')}}).then(r=>r.json()).then(()=>{renderQuickTasks();showToast('Deleted');}).catch(()=>showToast('Delete failed','error'));
+    }
+  });
+}
+
+// moveToCalendar removed per user request
+
+document.addEventListener('DOMContentLoaded',()=>{renderQuickTasks();});
+</script>
+
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends 'api/base.html' %}
+{% load i18n %}
+{% block title %}Rejestracja{% endblock %}
+{% block content %}
+        <div class="card" style="max-width:520px;margin:20px auto">
+            <h2 class="title">{% trans "Register" %}</h2>
+        {% if form.errors %}
+            <div style="color: red; margin-bottom:8px">{{ form.errors }}</div>
+        {% endif %}
+        <form method="post">
+            {% csrf_token %}
+            <div class="field">{{ form.username.label_tag }} {{ form.username }}</div>
+            <div class="field">{{ form.password1.label_tag }} {{ form.password1 }}</div>
+            <div class="field">{{ form.password2.label_tag }} {{ form.password2 }}</div>
+            <div style="display:flex;gap:8px"><button class="btn">{% trans "Register" %}</button><a class="btn secondary" href="{% url 'login' %}">{% trans "Cancel" %}</a></div>
+        </form>
+    </div>
+{% endblock %}

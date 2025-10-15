@@ -1,0 +1,14 @@
+{% extends 'api/base.html' %}
+{% load i18n %}
+{% block title %}{% if form.instance.pk %}{% trans "Edit task" %}{% else %}{% trans "Add task" %}{% endif %}{% endblock %}
+{% block content %}
+        <div class="card" style="max-width:640px;margin:20px auto">
+            <h2 class="title">{% if form.instance.pk %}{% trans "Edit task" %}{% else %}{% trans "Add task" %}{% endif %}</h2>
+        <form method="post">
+            {% csrf_token %}
+            <div class="field">{{ form.name.label_tag }} {{ form.name }}</div>
+            <div class="field">{{ form.desc.label_tag }} {{ form.desc }}</div>
+            <div style="display:flex;gap:8px"><button class="btn">{% if form.instance.pk %}{% trans "Save" %}{% else %}{% trans "Add" %}{% endif %}</button><a class="btn secondary" href="{% url 'task_list' %}">{% trans "Back" %}</a></div>
+        </form>
+    </div>
+{% endblock %}

@@ -1,0 +1,165 @@
+{% extends 'api/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Dashboard" %}{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+<style>
+  .fc-modal {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%,-50%);
+    background: white;
+    padding: 16px;
+    border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+    z-index: 1002;
+  }
+  .fc-backdrop{
+    position: fixed;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: 1000;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:1100px;margin:20px auto;padding:12px">
+  <h2 class="title">{% trans "Calendar" %}</h2>
+  <div id="calendar"></div>
+</div>
+
+<!-- modal do dodawania taska -->
+<div id="fc-backdrop" class="fc-backdrop" style="display:none"></div>
+<div id="fc-modal" class="fc-modal" style="display:none;min-width:320px">
+  <h3 id="modal-date">Add task</h3>
+  <form id="modal-form">
+    <div><label>{% trans "Title" %}: <input name="name" required></label></div>
+    <div><label>{% trans "Description" %}: <input name="desc"></label></div>
+    <div><label>{% trans "Priority" %}: 
+      <select name="priority">
+        <option value="low">Low</option>
+        <option value="medium" selected>Medium</option>
+        <option value="high">High</option>
+      </select>
+    </label></div>
+    <div><label>{% trans "Time" %}: <input name="scheduled_time" type="time"></label></div>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button class="btn">{% trans "Add" %}</button>
+      <button type="button" id="modal-cancel" class="btn secondary">{% trans "Cancel" %}</button>
+    </div>
+  </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+<script>
+const calendarEl = document.getElementById('calendar');
+const modal = document.getElementById('fc-modal');
+const backdrop = document.getElementById('fc-backdrop');
+const modalForm = document.getElementById('modal-form');
+let selectedDate = null;
+
+function showModal(dateStr){
+  selectedDate = dateStr;
+  document.getElementById('modal-date').innerText = dateStr;
+  modal.style.display = 'block';
+  backdrop.style.display = 'block';
+}
+
+function hideModal(){
+  modal.style.display = 'none';
+  backdrop.style.display = 'none';
+  modalForm.reset();
+}
+
+function getCookie(name){
+  let cookieValue = null;
+  if(document.cookie && document.cookie!==''){
+    const cookies = document.cookie.split(';');
+    for(let i=0;i<cookies.length;i++){
+      let cookie = cookies[i].trim();
+      if(cookie.substring(0,name.length+1) === (name+'=')){
+        cookieValue = decodeURIComponent(cookie.substring(name.length+1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+const calendar = new FullCalendar.Calendar(calendarEl, {
+  initialView: 'dayGridMonth',
+  headerToolbar: {left:'prev,next today',center:'title',right:'dayGridMonth,timeGridWeek,timeGridDay'},
+  dayMaxEventRows: true,
+  editable: true,
+  events: function(info, successCallback, failureCallback){
+    fetch(`/tasks/api/calendar/?start=${info.startStr}&end=${info.endStr}`)
+      .then(r => r.json())
+      .then(data => successCallback(data))
+      .catch(e => failureCallback(e));
+  },
+  eventContent: function(arg){
+    const priority = arg.event.extendedProps.priority || 'medium';
+    const el = document.createElement('div');
+    el.style.padding = '2px 4px';
+    el.style.borderRadius = '4px';
+    el.style.fontSize = '0.85em';
+    el.innerText = arg.event.title;
+
+    if(priority==='high') el.style.backgroundColor='#fda4af';
+    if(priority==='medium') el.style.backgroundColor='#fde68a';
+    if(priority==='low') el.style.backgroundColor='#bbf7d0';
+    return { domNodes: [el] };
+  },
+  dateClick: function(info){
+    showModal(info.dateStr);
+  },
+  eventClick: function(info){
+    const t = info.event;
+    alert(`Task: ${t.title}\nTime: ${t.start.toLocaleTimeString()}\nPriority: ${t.extendedProps.priority}\nDescription: ${t.extendedProps.desc || '-'}`);
+  },
+  eventDrop: function(info){
+    const id = info.event.id;
+    const newDate = info.event.startStr.split('T')[0];
+    fetch(`/tasks/api/${id}/date/`,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},
+      body: JSON.stringify({scheduled_date:newDate})
+    }).then(r=>{
+      if(!r.ok) throw new Error('update failed');
+      return r.json();
+    }).catch(()=>{alert('Update failed'); info.revert();});
+  }
+});
+calendar.render();
+
+// obsługa dodawania taska w kalendarzu
+modalForm.addEventListener('submit', function(evt){
+  evt.preventDefault();
+  const fd = new FormData(modalForm);
+  const payload = {
+    name: fd.get('name'),
+    desc: fd.get('desc'),
+    scheduled_date: selectedDate,
+    scheduled_time: fd.get('scheduled_time') || null,
+    priority: fd.get('priority') || 'medium',
+    in_calendar: true
+  };
+  fetch('/tasks/api/create/',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},
+    body: JSON.stringify(payload)
+  }).then(r=>r.json())
+    .then(json=>{
+      hideModal();
+      calendar.refetchEvents();
+    }).catch(()=>{alert('Create failed');});
+});
+
+document.getElementById('modal-cancel').addEventListener('click', hideModal);
+backdrop.addEventListener('click', hideModal);
+</script>
+{% endblock %}

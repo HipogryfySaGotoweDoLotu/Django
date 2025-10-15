@@ -1,0 +1,68 @@
+{% load static %}
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{% block title %}{% trans "Task App" %}{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'api/styles.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">
+        <!-- logo klikające w panel -->
+        <a href="{% url 'panel' %}" style="display:flex;align-items:center;text-decoration:none;color:inherit;">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="24" height="24" rx="6" fill="#2563eb"/>
+          </svg>
+          <h1 style="margin-left:8px">{% trans "Task Manager" %}</h1>
+        </a>
+      </div>
+      <div class="actions">
+        <form method="post" action="/i18n/setlang/" style="display:inline">{% csrf_token %}
+          <select name="language" onchange="this.form.submit()">
+            <option value="en" {% if LANGUAGE_CODE == 'en' %}selected{% endif %}>English</option>
+            <option value="pl" {% if LANGUAGE_CODE == 'pl' %}selected{% endif %}>Polski</option>
+            <option value="es" {% if LANGUAGE_CODE == 'es' %}selected{% endif %}>Español</option>
+            <option value="ru" {% if LANGUAGE_CODE == 'ru' %}selected{% endif %}>Русский</option>
+            <option value="mn" {% if LANGUAGE_CODE == 'mn' %}selected{% endif %}>Монгол</option>
+          </select>
+        </form>
+        {% if user.is_authenticated %}
+          <a href="{% url 'dashboard' %}">{% trans 'Dashboard' %}</a> |
+          <a href="{% url 'task_list_page' %}">{% trans 'Task List' %}</a> |
+          <a href="{% url 'task_create' %}">{% trans 'Add task' %}</a> |
+          <a href="{% url 'logout' %}">{% trans 'Logout' %}</a>
+        {% else %}
+          <a href="{% url 'login' %}">{% trans 'Login' %}</a> |
+          <a href="{% url 'register' %}">{% trans 'Register' %}</a>
+        {% endif %}
+      </div>
+    </div>
+
+    {% block content %}{% endblock %}
+  </div>
+  
+  <!-- Toast container for non-blocking notifications -->
+  <div id="toast-root" aria-live="polite" style="position:fixed;right:16px;bottom:16px;z-index:9999"></div>
+  <script>
+    function showToast(msg, type='info', timeout=3000){
+      const root = document.getElementById('toast-root');
+      if(!root) return alert(msg);
+      const el = document.createElement('div');
+      el.style.background = type==='error'?'#ef4444':'#111827';
+      el.style.color = '#fff';
+      el.style.padding = '8px 12px';
+      el.style.borderRadius = '8px';
+      el.style.marginTop = '8px';
+      el.style.boxShadow = '0 6px 18px rgba(0,0,0,0.12)';
+      el.innerText = msg;
+      root.appendChild(el);
+      setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity 200ms';setTimeout(()=>root.removeChild(el),250);}, timeout);
+    }
+  </script>
+</body>
+</html>

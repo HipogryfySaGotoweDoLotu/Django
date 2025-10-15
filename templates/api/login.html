@@ -1,0 +1,17 @@
+{% extends 'api/base.html' %}
+{% load i18n %}
+{% block title %}Logowanie{% endblock %}
+{% block content %}
+        <div class="card" style="max-width:480px;margin:20px auto">
+            <h2 class="title">{% trans "Login" %}</h2>
+        {% if form.errors %}
+            <div style="color:red;margin-bottom:8px">{{ form.errors }}</div>
+        {% endif %}
+            <form method="post">
+            {% csrf_token %}
+            <div class="field">{{ form.username.label_tag }} {{ form.username }}</div>
+            <div class="field">{{ form.password.label_tag }} {{ form.password }}</div>
+                <div style="display:flex;gap:8px"><button class="btn">{% trans "Login" %}</button><a class="btn secondary" href="{% url 'register' %}">{% trans "Register" %}</a></div>
+        </form>
+    </div>
+{% endblock %}

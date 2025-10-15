@@ -1,0 +1,84 @@
+{% extends 'api/base.html' %}
+{% load i18n %}
+{% block title %}{% trans "Task List" %}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:800px;margin:20px auto;padding:12px">
+  <h2 class="title">{% trans "Task List" %}</h2>
+  <div style="margin-bottom:8px">
+    <form id="list-add">
+      <input name="name" placeholder="{% trans 'Task title' %}" required>
+      <input type="date" name="scheduled_date">
+      <input type="time" name="scheduled_time">
+      <select name="priority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select>
+      <button class="btn">{% trans "Add" %}</button>
+    </form>
+  </div>
+  <div id="task-list" style="display:flex;flex-direction:column;gap:8px"></div>
+</div>
+  <!-- Edit modal -->
+  <div id="edit-backdrop" class="modal-backdrop" style="display:none"></div>
+  <div id="edit-modal" class="modal" style="display:none">
+    <h3>{% trans "Edit task" %}</h3>
+    <form id="edit-form">
+      <input type="hidden" name="id">
+      <div><label>{% trans "Title" %}: <input name="name" required></label></div>
+      <div><label>{% trans "Description" %}: <input name="desc"></label></div>
+      <div><label>{% trans "Priority" %}: <select name="priority"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label></div>
+      <div style="margin-top:8px;display:flex;gap:8px"><button class="btn">{% trans "Save" %}</button><button type="button" id="edit-cancel" class="btn secondary">{% trans "Cancel" %}</button></div>
+    </form>
+  </div>
+
+  <!-- Move to calendar removed per user request -->
+
+  <script>
+  function getCookie(name){let cookieValue=null;if(document.cookie&&document.cookie!==''){const cookies=document.cookie.split(';');for(let i=0;i<cookies.length;i++){const cookie=cookies[i].trim();if(cookie.substring(0,name.length+1)===(name+'=')){cookieValue=decodeURIComponent(cookie.substring(name.length+1));break;}}}return cookieValue}
+
+  function fetchTasks(){
+    fetch('/tasks/api/list/').then(r=>r.json()).then(data=>{
+      const list=document.getElementById('task-list');list.innerHTML='';
+      data.forEach(t=>{
+        const el=document.createElement('div');el.className='task-item';el.style.padding='12px';el.style.border='1px solid #e5e7eb';el.style.borderRadius='8px';el.style.background='#fff';
+        el.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-weight:600;font-size:16px">${t.name} ${t.edited?'<span style="font-size:12px;color:#9CA3AF;margin-left:8px">(edytowane)</span>':''}</div>
+            <div style="color:#374151;margin-top:6px">${t.desc||''}</div>
+            <div style="font-size:12px;color:#6B7280;margin-top:8px">${t.scheduled_date?('Date: '+t.scheduled_date):''} ${t.scheduled_time?(' Time: '+t.scheduled_time):''} • Priority: ${t.priority}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn edit-btn" data-id="${t.id}">Edit</button>
+            <!-- move-to-calendar removed -->
+            <button class="btn delete-btn" data-id="${t.id}">Delete</button>
+          </div>
+        </div>
+      `;list.appendChild(el);
+      });
+
+      document.querySelectorAll('.delete-btn').forEach(b=>b.addEventListener('click',e=>{const id=e.target.dataset.id; if(!confirm('Delete?')) return; // fetch task data for undo
+        const card = e.target.closest('.task-item'); const name = card?card.querySelector('div').innerText.split('\n')[0]:null; fetch(`/tasks/api/${id}/delete/`,{method:'DELETE',headers:{'X-CSRFToken':getCookie('csrftoken')}}).then(r=>r.json()).then(()=>{fetchTasks();
+          // show undo toast
+          const undoId = id;
+          showToast('Deleted', 'info', 5000);
+        }).catch(()=>showToast('Delete failed','error'));}));
+
+      document.querySelectorAll('.edit-btn').forEach(b=>b.addEventListener('click',e=>{
+        const id=e.target.dataset.id; openEditModal(id);
+      }));
+
+      // move handlers removed
+    });
+  }
+
+  // Edit modal handling
+  function openEditModal(id){
+    // fetch task details to populate
+    fetch('/tasks/api/list/').then(r=>r.json()).then(data=>{const t = data.find(x=>x.id==id); if(!t) return; const form=document.getElementById('edit-form'); form.id.value = t.id; form.name.value = t.name; form.desc.value = t.desc||''; form.priority.value = t.priority||'medium'; document.getElementById('edit-modal').style.display='block'; setTimeout(()=>{ try{ form.name.focus(); }catch(e){} },50);});
+  }
+  document.getElementById('edit-cancel').addEventListener('click',()=>{document.getElementById('edit-modal').style.display='none'});
+  document.getElementById('edit-form').addEventListener('submit',function(e){e.preventDefault(); const fd=new FormData(e.target); const payload = {name: fd.get('name'), desc: fd.get('desc'), priority: fd.get('priority')}; fetch(`/tasks/api/${fd.get('id')}/date/`,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},body:JSON.stringify(payload)}).then(r=>{if(!r.ok) throw new Error('save'); return r.json();}).then(()=>{document.getElementById('edit-modal').style.display='none'; fetchTasks(); showToast('Saved');}).catch(()=>showToast('Save failed','error'));});
+
+  document.getElementById('list-add').addEventListener('submit',function(e){e.preventDefault();const fd=new FormData(e.target);const payload={name:fd.get('name'),desc:'',scheduled_date:fd.get('scheduled_date')||null,scheduled_time:fd.get('scheduled_time')||null,priority:fd.get('priority'),in_calendar:false};fetch('/tasks/api/create/',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},body:JSON.stringify(payload)}).then(r=>r.json()).then(()=>{e.target.reset();fetchTasks(); showToast('Created');}).catch(()=>showToast('Create failed','error'))});
+
+  fetchTasks();
+  </script>
+{% endblock %}

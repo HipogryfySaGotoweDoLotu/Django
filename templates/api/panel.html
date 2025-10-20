@@ -1,84 +1,383 @@
 {% extends 'api/base.html' %}
 {% load i18n %}
+{% load static %}
+
 {% block title %}{% trans "Panel" %}{% endblock %}
+
 {% block extra_head %}
-<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
 <style>
-/* Landing and card styles */
-.landing {max-width:1100px;margin:28px auto;padding:18px}
-.choices {display:flex;gap:20px;flex-wrap:wrap;justify-content:center}
-.choice {flex:1 1 320px;max-width:420px;background:#fff;border-radius:12px;padding:20px;border:1px solid #e6e7eb;box-shadow:0 6px 18px rgba(15,23,42,0.06);text-align:center}
-.choice h3{margin:6px 0 12px}
-.choice p{color:#6b7280}
-.btn-large{display:inline-block;padding:10px 18px;border-radius:8px;background:#2563eb;color:#fff;text-decoration:none;margin-top:12px}
-.task-list-cards{display:flex;flex-direction:column;gap:12px;margin-top:12px}
-.task-card{background:#fff;border-radius:10px;padding:12px;border:1px solid #eef2ff;display:flex;justify-content:space-between;align-items:flex-start}
-.task-meta{font-size:13px;color:#6b7280;margin-top:8px}
-.task-actions{display:flex;flex-direction:column;gap:8px}
-.small-btn{padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;background:#fff}
-.small-btn.primary{background:#10b981;color:#fff;border:none}
-</style>
-{% endblock %}
-{% block content %}
-<div class="landing">
-  <h1 style="text-align:center">{% trans "Welcome to your Tasks" %}</h1>
-  <p style="text-align:center;color:#6b7280">{% trans "From here you can open the Calendar to schedule tasks or manage the Task List as cards." %}</p>
-  <div class="choices">
-    <div class="choice">
-      <h3>{% trans "Calendar" %}</h3>
-      <p>{% trans "Full month view with drag & drop. Add tasks by clicking a day." %}</p>
-      <a class="btn-large" href="/tasks/dashboard/">{% trans "Open Calendar" %}</a>
-    </div>
-    <div class="choice">
-      <h3>{% trans "Task List" %}</h3>
-      <p>{% trans "Card-style list for quick management and priorities." %}</p>
-      <a class="btn-large" href="/tasks/list/">{% trans "Open Task List" %}</a>
-    </div>
-  </div>
-
-  <hr style="margin:20px 0">
-  <h2 style="text-align:center">{% trans "Quick overview" %}</h2>
-  <div id="quick-tasks" class="task-list-cards"></div>
-</div>
-
-<script>
-// fetch a short list of latest non-calendar tasks and show quick action buttons
-function getCookie(name){let cookieValue=null;if(document.cookie&&document.cookie!==''){const cookies=document.cookie.split(';');for(let i=0;i<cookies.length;i++){const cookie=cookies[i].trim();if(cookie.substring(0,name.length+1)===(name+'=')){cookieValue=decodeURIComponent(cookie.substring(name.length+1));break;}}}return cookieValue}
-
-function renderQuickTasks(){
-  fetch('/tasks/api/list/?limit=6').then(r=>r.json()).then(data=>{
-    const wrap = document.getElementById('quick-tasks');
-    wrap.innerHTML='';
-    data.forEach(t=>{
-      const card = document.createElement('div');
-      card.className='task-card';
-      card.innerHTML = `
-        <div>
-          <div style="font-weight:600">${t.name} ${t.edited?'<span style="font-size:12px;color:#9CA3AF;margin-left:8px">(edytowane)</span>':''}</div>
-          <div class="task-meta">${t.scheduled_date?('Date: '+t.scheduled_date):''} ${t.scheduled_time?(' Time: '+t.scheduled_time):''} • ${t.priority}</div>
-        </div>
-        <div class="task-actions">
-          <a class="small-btn" href="/tasks/task/${t.id}/edit/">Edit</a>
-          <button class="small-btn delete-btn" data-id="${t.id}">{% trans "Delete" %}</button>
-        </div>
-      `;
-      wrap.appendChild(card);
-    });
-  }).catch(()=>{document.getElementById('quick-tasks').innerHTML='';});
-
-  // delegate delete handler
-  document.addEventListener('click', function(e){
-    if(e.target && e.target.classList && e.target.classList.contains('delete-btn')){
-      const id = e.target.dataset.id;
-      if(!confirm('Delete?')) return;
-      fetch(`/tasks/api/${id}/delete/`,{method:'DELETE',headers:{'X-CSRFToken':getCookie('csrftoken')}}).then(r=>r.json()).then(()=>{renderQuickTasks();showToast('Deleted');}).catch(()=>showToast('Delete failed','error'));
-    }
-  });
+/* --- BODY I TŁO --- */
+body {
+  margin:0;
+  padding:0;
+  overflow-x:hidden;
+  font-family: 'Arial', sans-serif;
+  color:#f5f5f5;
+  background:#000 url("{% static 'api/images/galaxy_bg.jpg' %}") no-repeat center center fixed;
+  background-size: cover;
+  position:relative;
+  z-index:0;
 }
 
-// moveToCalendar removed per user request
+/* --- DYNAMICZNE KWADRATY W TLE --- */
+.square {
+  position:fixed;
+  width:6px;
+  height:6px;
+  background: rgba(255,255,255,0.8);
+  top:0;
+  left:0;
+  border-radius:2px;
+  pointer-events:none;
+  z-index:0;
+  animation-name: moveSquare;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
 
-document.addEventListener('DOMContentLoaded',()=>{renderQuickTasks();});
+@keyframes moveSquare {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(var(--dx), var(--dy)); }
+}
+
+/* --- LANDING CHOICES --- */
+.landing {
+  max-width:1100px;
+  margin:28px auto;
+  padding:18px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+  gap:20px;
+  z-index: 1;
+  position: relative;
+}
+
+.choice {
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  color:white;
+  height:180px;
+  border-radius:16px;
+  padding:16px;
+  background-size:cover;
+  background-position:center;
+  cursor:pointer;
+  transition: transform 0.2s, box-shadow 0.3s;
+  background-blend-mode: overlay;
+  background-color: rgba(10,10,30,0.5);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+}
+.choice:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.8);
+}
+.choice h3, .choice p {
+  text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+  margin:0;
+}
+
+/* --- CYTAT DNIA --- */
+.quote-of-the-day {
+  max-width:800px;
+  margin:28px auto;
+  padding:24px;
+  border-radius:16px;
+  text-align:center;
+  background: rgba(25,25,50,0.6);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+  position: relative;
+  z-index: 1;
+}
+.quote-of-the-day p {
+  margin-top:12px;
+  font-size:18px;
+  font-style:italic;
+  opacity:1;
+  transition: opacity 1s;
+}
+
+/* --- DZISIEJSZE ZADANIA --- */
+.today-tasks {
+  max-width:800px;
+  margin:28px auto;
+  padding:20px;
+  border-radius:16px;
+  text-align:center;
+  background: rgba(25,25,50,0.6);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+  position: relative;
+  z-index: 1;
+}
+
+/* --- KURS BITCOINA --- */
+.live-births {
+  background: rgba(20,20,50,0.6);
+  color:white;
+  padding:16px;
+  border-radius:16px;
+  text-align:center;
+  font-size:20px;
+  margin-top:20px;
+  box-shadow:0 8px 20px rgba(0,0,0,0.6);
+  position: relative;
+  z-index: 1;
+}
+
+/* --- REKLAMA PIONOWA --- */
+.side-ad {
+  position:fixed;
+  top:100px;
+  right:0;
+  width:180px;
+  height:400px;
+  cursor:pointer;
+  z-index:999;
+  transform: translateX(100px);
+  opacity:0;
+  transition: transform 0.5s ease, opacity 0.5s ease;
+}
+.side-ad img {
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  border-radius:16px 0 0 16px;
+  box-shadow: -4px 4px 20px rgba(0,0,0,0.6);
+}
+
+/* --- POWIADOMIENIA CHAT --- */
+.chat-notification {
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  background: linear-gradient(135deg, #4ade80, #16a34a);
+  color:white;
+  padding:12px 16px 12px 60px;
+  border-radius:12px;
+  box-shadow:0 6px 16px rgba(0,0,0,0.25);
+  opacity:0;
+  transform: translateY(50px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  z-index:1000;
+  font-size:16px;
+  cursor:default;
+  display:flex;
+  align-items:center;
+  min-width:250px;
+}
+.chat-notification img {
+  position:absolute;
+  left:10px;
+  width:40px;
+  height:40px;
+  border-radius:50%;
+  object-fit:cover;
+  border:2px solid white;
+}
+.chat-notification .close-btn {
+  position:absolute;
+  top:5px;
+  right:8px;
+  font-weight:bold;
+  cursor:pointer;
+  font-size:18px;
+}
+
+/* --- ZEGAR CYFROWY --- */
+#current-time {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 28px;
+  font-weight: 600;
+  color: #f5f5f5;
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(30, 30, 60, 0.85);
+  padding: 12px 16px;
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.7);
+  letter-spacing: 2px;
+  z-index: 1000;
+}
+
+/* --- PASEK DNIA --- */
+#day-bar {
+  height:6px;
+  width:0%;
+  background:#f5a623;
+  border-radius:3px;
+  margin-top:4px;
+  transition:width 0.5s;
+  position: relative;
+  z-index: 1;
+}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="landing">
+  <div class="choice" id="calendar-choice" onclick="location.href='/tasks/dashboard/'" 
+       style="background-image:url('{% static 'api/images/Kalendarz.jpg' %}')">
+    <h3>{% trans "Calendar" %}</h3>
+    <p>{% trans "Click a day to add tasks" %}</p>
+  </div>
+
+  <div class="choice" id="list-choice" onclick="location.href='/tasks/list/'" 
+       style="background-image:url('{% static 'api/images/Lista.jpg' %}')">
+    <h3>{% trans "Task List" %}</h3>
+    <p>{% trans "Quick management view" %}</p>
+  </div>
+
+  <div class="choice" id="stats-choice" onclick="location.href='/tasks/stats/'" 
+       style="background-image:url('{% static 'api/images/Stats.jpg' %}')">
+    <h3>{% trans "Stats" %}</h3>
+    <p>{% trans "Overview of priorities" %}</p>
+  </div>
+</div>
+
+<div class="quote-of-the-day">
+  <h3 style="margin:0;font-size:20px;font-weight:600;">Cytat dnia:</h3>
+  <p id="daily-quote">Ładowanie cytatu...</p>
+</div>
+
+<div class="today-tasks">
+  <h3 style="margin:0;font-size:20px;font-weight:600;">Dzisiejsze zadania:</h3>
+  <p style="margin-top:12px;font-size:18px;">
+    Wszystkie: <span id="today-total">0</span> • Ukończone: <span id="today-done">0</span>
+  </p>
+</div>
+
+<!-- 🔥 NOWA SEKCJA: KURS BITCOINA -->
+<div class="live-births">
+  <h4>₿ Kurs Bitcoina</h4>
+  <p id="btc-price">Ładowanie...</p>
+</div>
+<!-- 🔥 KONIEC ZMIANY -->
+
+<div class="side-ad">
+  <img src="{% static 'api/images/superbet.jpg' %}" alt="Superbeta Game">
+</div>
+
+<div id="chat-container"></div>
+
+<div id="current-time">00:00:00</div>
+<div id="day-bar"></div>
+
+<script>
+/* --- 20 KWADRATÓW W TLE --- */
+const numSquares = 150;
+for (let i = 0; i < numSquares; i++) {
+  const sq = document.createElement('div');
+  sq.className = 'square';
+  sq.style.top = Math.random() * window.innerHeight + 'px';
+  sq.style.left = Math.random() * window.innerWidth + 'px';
+  const dx = (Math.random() * 200 - 100) + 'px';
+  const dy = (Math.random() * 200 - 100) + 'px';
+  sq.style.setProperty('--dx', dx);
+  sq.style.setProperty('--dy', dy);
+  const duration = 11 + Math.random() * 2;
+  sq.style.animationDuration = duration + 's';
+  document.body.appendChild(sq);
+}
+
+/* --- Cytat dnia --- */
+const quotes = [
+  "Nie odkładaj na jutro tego, co możesz zrobić dzisiaj!",
+  "Każdy dzień jest nową szansą.",
+  "Sukces to suma małych wysiłków powtarzanych codziennie.",
+  "Najlepszy czas na działanie jest teraz.",
+  "Nie bój się popełniać błędów, bo to one uczą najwięcej.",
+  "Małe kroki codziennie prowadzą do wielkich rezultatów.",
+  "Nie porównuj się z innymi, bądź lepszą wersją siebie."
+];
+let lastIndex = -1;
+function changeQuote() {
+  const quoteEl = document.getElementById('daily-quote');
+  quoteEl.style.opacity = 0;
+  setTimeout(() => {
+    let index;
+    do { index = Math.floor(Math.random() * quotes.length); } while (index === lastIndex);
+    lastIndex = index;
+    quoteEl.innerText = quotes[index];
+    quoteEl.style.opacity = 1;
+  }, 500);
+}
+changeQuote();
+setInterval(changeQuote, 60000);
+
+/* --- Dzisiejsze zadania --- */
+function updateTodayTasks(){
+  fetch('/tasks/api/list/')
+    .then(r=>r.json())
+    .then(data=>{
+      const today = new Date().toISOString().slice(0,10);
+      const todayTasks = data.filter(t => t.scheduled_date === today);
+      const done = todayTasks.filter(t => t.completed).length;
+      document.getElementById('today-total').innerText = todayTasks.length;
+      document.getElementById('today-done').innerText = done;
+    });
+}
+document.addEventListener('DOMContentLoaded', updateTodayTasks);
+setInterval(updateTodayTasks, 60000);
+
+/* --- 💰 KURS BITCOINA (COINGECKO API) --- */
+async function fetchBTC() {
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+    const data = await res.json();
+    const price = data.bitcoin.usd.toLocaleString('en-US', {minimumFractionDigits: 2});
+    document.getElementById('btc-price').textContent = `1 BTC = $${price}`;
+  } catch (e) {
+    console.error(e);
+    document.getElementById('btc-price').textContent = 'Błąd pobierania kursu.';
+  }
+}
+fetchBTC();
+setInterval(fetchBTC, 10000git );
+
+
+/* --- Reklama --- */
+const sideAd = document.querySelector('.side-ad');
+sideAd.addEventListener('click',()=>window.open('https://superbet.pl','_blank'));
+sideAd.addEventListener('mouseenter',()=>sideAd.style.transform='translateX(-10px)');
+sideAd.addEventListener('mouseleave',()=>sideAd.style.transform='translateX(0)');
+setTimeout(()=>{ sideAd.style.opacity=1; sideAd.style.transform='translateX(0)'; }, 1000);
+
+/* --- Powiadomienia chat --- */
+const chatContainer = document.getElementById('chat-container');
+const chatUsers = [
+  {name:'Ania', img:'{% static "api/images/ania.jpg" %}', messages:['hej! do roboty frajerze!', 'ty spisz?', 'umyles sie?']},
+  {name:'Marek', img:'{% static "api/images/marek.jpg" %}', messages:['pingpong cos kurde ten?', 'zaczniesz dzis pracowac?', 'lubie kiedy twoja stopa dotyka mojej']},
+  {name:'Stanisław', img:'{% static "api/images/stanislaw.jpg" %}', messages:['gramy w fifke?', 'dablju?', 'no elo elo!']}
+];
+let chatShowing = false;
+function showNextChat(){
+  if(chatShowing) return;
+  const user = chatUsers[Math.floor(Math.random()*chatUsers.length)];
+  const msg = user.messages[Math.floor(Math.random()*user.messages.length)];
+  const notif = document.createElement('div');
+  notif.className='chat-notification';
+  notif.innerHTML = `<img src="${user.img}" alt="${user.name}">${user.name}: ${msg} 💬<span class="close-btn">&times;</span>`;
+  chatContainer.appendChild(notif);
+  chatShowing = true;
+  setTimeout(()=>{ notif.style.opacity=1; notif.style.transform='translateY(0)'; }, 100);
+  notif.querySelector('.close-btn').addEventListener('click', ()=>{ notif.remove(); chatShowing=false; });
+}
+setInterval(showNextChat,7000);
+setTimeout(showNextChat,3000);
+
+/* --- Zegar cyfrowy --- */
+function updateClock() {
+  const now = new Date();
+  const hours = now.getHours().toString().padStart(2,'0');
+  const minutes = now.getMinutes().toString().padStart(2,'0');
+  const seconds = now.getSeconds().toString().padStart(2,'0');
+  const colon = seconds % 2 === 0 ? ':' : ' ';
+  document.getElementById('current-time').innerText = `${hours}${colon}${minutes}${colon}${seconds}`;
+}
+setInterval(updateClock,1000);
+updateClock();
 </script>
-
 {% endblock %}

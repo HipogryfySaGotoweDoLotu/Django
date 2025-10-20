@@ -10,4 +10,6 @@ urlpatterns = [
     path('logout/', logout_view, name='logout'),
     path('tasks/', include('api.urls')),  # wszystkie ścieżki z aplikacji api
     path('api/', RedirectView.as_view(pattern_name='task_list', permanent=False)),  # /api/ -> /tasks/
+    path('api/task/<int:pk>/complete/', views.api_task_complete_toggle, name='api_task_complete_toggle'),
+
 ]

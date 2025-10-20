@@ -15,4 +15,8 @@ urlpatterns = [
     path('api/<int:pk>/date/', views.api_update_task_date, name='api_update_task_date'),
     path('api/list/', views.api_task_list, name='api_task_list'),
     path('api/<int:pk>/delete/', views.api_task_delete, name='api_task_delete'),
+    path('api/task/<int:pk>/complete/', views.api_task_complete_toggle, name='api_task_complete_toggle'),
+    path('completed/', views.completed_tasks, name='completed_tasks'),
+
+
 ]

@@ -1,84 +1,307 @@
 {% extends 'api/base.html' %}
 {% load i18n %}
+{% load static %}
+
 {% block title %}{% trans "Task List" %}{% endblock %}
+
 {% block content %}
+<style>
+/* Poprawiony układ task-item */
+.task-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  gap: 12px;
+}
+
+.task-item.completed {
+  background: #d1fae5;
+}
+
+.task-item .task-content {
+  flex: 1; /* zajmuje całą szerokość oprócz przycisków */
+}
+
+.task-item .task-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto; /* przesunięcie przycisków w prawo */
+}
+</style>
+
 <div class="card" style="max-width:800px;margin:20px auto;padding:12px">
   <h2 class="title">{% trans "Task List" %}</h2>
-  <div style="margin-bottom:8px">
+
+  <!-- Dodawanie nowego zadania -->
+  <div style="margin-bottom:12px">
     <form id="list-add">
       <input name="name" placeholder="{% trans 'Task title' %}" required>
+      <input name="desc" placeholder="{% trans 'Description' %}">
       <input type="date" name="scheduled_date">
       <input type="time" name="scheduled_time">
-      <select name="priority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select>
+      <select name="priority">
+        <option value="low">Low</option>
+        <option value="medium" selected>Medium</option>
+        <option value="high">High</option>
+      </select>
       <button class="btn">{% trans "Add" %}</button>
     </form>
   </div>
-  <div id="task-list" style="display:flex;flex-direction:column;gap:8px"></div>
-</div>
-  <!-- Edit modal -->
-  <div id="edit-backdrop" class="modal-backdrop" style="display:none"></div>
-  <div id="edit-modal" class="modal" style="display:none">
-    <h3>{% trans "Edit task" %}</h3>
-    <form id="edit-form">
-      <input type="hidden" name="id">
-      <div><label>{% trans "Title" %}: <input name="name" required></label></div>
-      <div><label>{% trans "Description" %}: <input name="desc"></label></div>
-      <div><label>{% trans "Priority" %}: <select name="priority"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label></div>
-      <div style="margin-top:8px;display:flex;gap:8px"><button class="btn">{% trans "Save" %}</button><button type="button" id="edit-cancel" class="btn secondary">{% trans "Cancel" %}</button></div>
-    </form>
+
+  <div class="mb-3 flex gap-2">
+    <button class="filter-btn bg-blue-500 text-white px-3 py-1 rounded" data-filter="all">Wszystkie</button>
+    <button class="filter-btn bg-green-500 text-white px-3 py-1 rounded" data-filter="done">Ukończone</button>
+    <button class="filter-btn bg-yellow-500 text-white px-3 py-1 rounded" data-filter="todo">Nieukończone</button>
   </div>
 
-  <!-- Move to calendar removed per user request -->
+  <!-- Lista aktywnych zadań -->
+  <div id="active-tasks-section">
+    <h3>{% trans "Active Tasks" %}</h3>
+    <div id="task-list" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
 
-  <script>
-  function getCookie(name){let cookieValue=null;if(document.cookie&&document.cookie!==''){const cookies=document.cookie.split(';');for(let i=0;i<cookies.length;i++){const cookie=cookies[i].trim();if(cookie.substring(0,name.length+1)===(name+'=')){cookieValue=decodeURIComponent(cookie.substring(name.length+1));break;}}}return cookieValue}
+  <!-- Lista ukończonych zadań -->
+  <div id="completed-tasks-section" style="margin-top:24px">
+    <h3>{% trans "Completed Tasks" %}</h3>
+    <div id="completed-task-list" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
 
-  function fetchTasks(){
-    fetch('/tasks/api/list/').then(r=>r.json()).then(data=>{
-      const list=document.getElementById('task-list');list.innerHTML='';
-      data.forEach(t=>{
-        const el=document.createElement('div');el.className='task-item';el.style.padding='12px';el.style.border='1px solid #e5e7eb';el.style.borderRadius='8px';el.style.background='#fff';
-        el.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div>
-            <div style="font-weight:600;font-size:16px">${t.name} ${t.edited?'<span style="font-size:12px;color:#9CA3AF;margin-left:8px">(edytowane)</span>':''}</div>
-            <div style="color:#374151;margin-top:6px">${t.desc||''}</div>
-            <div style="font-size:12px;color:#6B7280;margin-top:8px">${t.scheduled_date?('Date: '+t.scheduled_date):''} ${t.scheduled_time?(' Time: '+t.scheduled_time):''} • Priority: ${t.priority}</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <button class="btn edit-btn" data-id="${t.id}">Edit</button>
-            <!-- move-to-calendar removed -->
-            <button class="btn delete-btn" data-id="${t.id}">Delete</button>
-          </div>
-        </div>
-      `;list.appendChild(el);
-      });
+  <!-- Completion Circle -->
+  <div style="margin-top:24px;text-align:center">
+    <h3>{% trans "Completion" %}</h3>
+    <canvas id="completion-circle" width="120" height="120"></canvas>
+    <div id="completion-text" style="margin-top:8px;font-weight:bold">0%</div>
+  </div>
+</div>
 
-      document.querySelectorAll('.delete-btn').forEach(b=>b.addEventListener('click',e=>{const id=e.target.dataset.id; if(!confirm('Delete?')) return; // fetch task data for undo
-        const card = e.target.closest('.task-item'); const name = card?card.querySelector('div').innerText.split('\n')[0]:null; fetch(`/tasks/api/${id}/delete/`,{method:'DELETE',headers:{'X-CSRFToken':getCookie('csrftoken')}}).then(r=>r.json()).then(()=>{fetchTasks();
-          // show undo toast
-          const undoId = id;
-          showToast('Deleted', 'info', 5000);
-        }).catch(()=>showToast('Delete failed','error'));}));
+<!-- Edit modal -->
+<div id="edit-backdrop" class="modal-backdrop" style="display:none"></div>
+<div id="edit-modal" class="modal" style="display:none">
+  <h3>{% trans "Edit task" %}</h3>
+  <form id="edit-form">
+    <input type="hidden" name="id">
+    <div><label>{% trans "Title" %}: <input name="name" required></label></div>
+    <div><label>{% trans "Description" %}: <input name="desc"></label></div>
+    <div><label>{% trans "Priority" %}: 
+      <select name="priority">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+    </label></div>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button class="btn">{% trans "Save" %}</button>
+      <button type="button" id="edit-cancel" class="btn secondary">{% trans "Cancel" %}</button>
+    </div>
+  </form>
+</div>
 
-      document.querySelectorAll('.edit-btn').forEach(b=>b.addEventListener('click',e=>{
-        const id=e.target.dataset.id; openEditModal(id);
-      }));
-
-      // move handlers removed
+<script>
+function getCookie(name){
+  let cookieValue=null;
+  if(document.cookie && document.cookie!==''){
+    document.cookie.split(';').forEach(c=>{
+      if(c.trim().startsWith(name+'=')){
+        cookieValue=decodeURIComponent(c.trim().substring(name.length+1));
+      }
     });
   }
+  return cookieValue;
+}
 
-  // Edit modal handling
-  function openEditModal(id){
-    // fetch task details to populate
-    fetch('/tasks/api/list/').then(r=>r.json()).then(data=>{const t = data.find(x=>x.id==id); if(!t) return; const form=document.getElementById('edit-form'); form.id.value = t.id; form.name.value = t.name; form.desc.value = t.desc||''; form.priority.value = t.priority||'medium'; document.getElementById('edit-modal').style.display='block'; setTimeout(()=>{ try{ form.name.focus(); }catch(e){} },50);});
-  }
-  document.getElementById('edit-cancel').addEventListener('click',()=>{document.getElementById('edit-modal').style.display='none'});
-  document.getElementById('edit-form').addEventListener('submit',function(e){e.preventDefault(); const fd=new FormData(e.target); const payload = {name: fd.get('name'), desc: fd.get('desc'), priority: fd.get('priority')}; fetch(`/tasks/api/${fd.get('id')}/date/`,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},body:JSON.stringify(payload)}).then(r=>{if(!r.ok) throw new Error('save'); return r.json();}).then(()=>{document.getElementById('edit-modal').style.display='none'; fetchTasks(); showToast('Saved');}).catch(()=>showToast('Save failed','error'));});
+// Pobranie i wyświetlenie zadań
+function fetchTasks(){
+  fetch('/tasks/api/list/').then(r=>r.json()).then(data=>{
+    const activeList=document.getElementById('task-list');
+    const completedList=document.getElementById('completed-task-list');
+    activeList.innerHTML='';
+    completedList.innerHTML='';
+    let completedCount=0;
 
-  document.getElementById('list-add').addEventListener('submit',function(e){e.preventDefault();const fd=new FormData(e.target);const payload={name:fd.get('name'),desc:'',scheduled_date:fd.get('scheduled_date')||null,scheduled_time:fd.get('scheduled_time')||null,priority:fd.get('priority'),in_calendar:false};fetch('/tasks/api/create/',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},body:JSON.stringify(payload)}).then(r=>r.json()).then(()=>{e.target.reset();fetchTasks(); showToast('Created');}).catch(()=>showToast('Create failed','error'))});
+    data.forEach(t=>{
+      const el=document.createElement('div');
+      el.className='task-item'+(t.completed ? ' completed' : '');
+      if(t.completed) completedCount++;
 
-  fetchTasks();
-  </script>
+      el.innerHTML = `
+        <div class="task-content">
+          <div style="font-weight:600;font-size:16px">
+            ${t.name} ${t.edited?'<span style="font-size:12px;color:#9CA3AF;margin-left:8px">(edytowane)</span>':''}
+          </div>
+          <div style="color:#374151;margin-top:6px">${t.desc||''}</div>
+          <div style="font-size:12px;color:#6B7280;margin-top:8px">
+            ${t.scheduled_date?('Date: '+t.scheduled_date):''} ${t.scheduled_time?(' Time: '+t.scheduled_time):''} • Priority: ${t.priority}
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="btn complete-btn" data-id="${t.id}">
+            ${t.completed ? 'Uncomplete' : 'Complete'}
+          </button>
+          <button class="btn edit-btn" data-id="${t.id}">Edit</button>
+          <button class="btn delete-btn" data-id="${t.id}">Delete</button>
+        </div>
+      `;
+
+      if(t.completed) completedList.appendChild(el);
+      else activeList.appendChild(el);
+    });
+
+    updateCompletionCircle(completedCount, data.length);
+
+    // Event listeners
+    document.querySelectorAll('.delete-btn').forEach(b=>{
+      b.addEventListener('click', e=>{
+        const id=e.currentTarget.dataset.id;
+        if(!confirm('Delete?')) return;
+        fetch(`/tasks/api/${id}/delete/`,{method:'DELETE',headers:{'X-CSRFToken':getCookie('csrftoken')}})
+        .then(()=>fetchTasks());
+      });
+    });
+
+    document.querySelectorAll('.edit-btn').forEach(b=>{
+      b.addEventListener('click', e=>{
+        const id=e.currentTarget.dataset.id;
+        openEditModal(id);
+      });
+    });
+
+    document.querySelectorAll('.complete-btn').forEach(b=>{
+      b.addEventListener('click', e=>{
+        const btn = e.currentTarget;
+        const id = btn.dataset.id;
+        const completed = btn.innerText === 'Complete';
+        fetch(`/tasks/api/task/${id}/complete/`,{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},
+          body: JSON.stringify({completed})
+        }).then(()=> fetchTasks());
+      });
+    });
+
+  });
+}
+
+// Kółko procentu z animacją
+function updateCompletionCircle(completed, total){
+  const canvas=document.getElementById('completion-circle');
+  const ctx=canvas.getContext('2d');
+  const percent = total ? Math.round((completed/total)*100) : 0;
+  const radius = 50;
+  const center = 60;
+
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+
+  ctx.beginPath();
+  ctx.arc(center, center, radius, 0, 2*Math.PI);
+  ctx.strokeStyle='#e5e7eb';
+  ctx.lineWidth=10;
+  ctx.stroke();
+
+  let start=0;
+  const end = percent/100*2*Math.PI;
+  const animate = ()=>{
+    start+=0.02;
+    ctx.beginPath();
+    ctx.arc(center, center, radius, -Math.PI/2, -Math.PI/2 + Math.min(start,end));
+    ctx.strokeStyle='#10b981';
+    ctx.lineWidth=10;
+    ctx.stroke();
+    if(start<end) requestAnimationFrame(animate);
+  };
+  animate();
+
+  document.getElementById('completion-text').innerText=percent+'%';
+}
+
+// Edit modal
+function openEditModal(id){
+  fetch('/tasks/api/list/').then(r=>r.json()).then(data=>{
+    const t = data.find(x=>x.id==id);
+    if(!t) return;
+    const form=document.getElementById('edit-form');
+    form.id.value = t.id;
+    form.name.value = t.name;
+    form.desc.value = t.desc||'';
+    form.priority.value = t.priority||'medium';
+    document.getElementById('edit-modal').style.display='block';
+  });
+}
+
+document.getElementById('edit-cancel').addEventListener('click',()=>{
+  document.getElementById('edit-modal').style.display='none';
+});
+
+// Zapis edycji
+document.getElementById('edit-form').addEventListener('submit', function(e){
+  e.preventDefault();
+  const fd=new FormData(e.target);
+  const payload = {name: fd.get('name'), desc: fd.get('desc'), priority: fd.get('priority')};
+  fetch(`/tasks/api/${fd.get('id')}/date/`,{
+    method:'PATCH',
+    headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},
+    body: JSON.stringify(payload)
+  }).then(r=>r.json()).then(()=>{
+    document.getElementById('edit-modal').style.display='none';
+    fetchTasks();
+  });
+});
+
+// Filtrowanie zadań + ukrywanie nagłówków
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const filter = btn.dataset.filter;
+    const activeSection = document.getElementById('active-tasks-section');
+    const completedSection = document.getElementById('completed-tasks-section');
+
+    if(filter === 'all'){
+      activeSection.style.display = 'block';
+      completedSection.style.display = 'block';
+    } else if(filter === 'done'){
+      activeSection.style.display = 'none';
+      completedSection.style.display = 'block';
+    } else if(filter === 'todo'){
+      activeSection.style.display = 'block';
+      completedSection.style.display = 'none';
+    }
+
+    document.querySelectorAll('.task-item').forEach(task => {
+      const completed = task.querySelector('.complete-btn')?.innerText === 'Uncomplete';
+      if (filter === 'all') task.style.display = 'flex';
+      if (filter === 'done') task.style.display = completed ? 'flex' : 'none';
+      if (filter === 'todo') task.style.display = completed ? 'none' : 'flex';
+    });
+  });
+});
+
+// Dodawanie nowego zadania
+document.getElementById('list-add').addEventListener('submit', function(e){
+  e.preventDefault();
+  const fd=new FormData(e.target);
+  const payload={
+    name:fd.get('name'),
+    desc:fd.get('desc'),
+    scheduled_date:fd.get('scheduled_date')||null,
+    scheduled_time:fd.get('scheduled_time')||null,
+    priority:fd.get('priority'),
+    in_calendar:false
+  };
+  fetch('/tasks/api/create/',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')},
+    body: JSON.stringify(payload)
+  }).then(()=>{
+    e.target.reset();
+    fetchTasks();
+  });
+});
+
+// Inicjalizacja
+fetchTasks();
+</script>
 {% endblock %}
